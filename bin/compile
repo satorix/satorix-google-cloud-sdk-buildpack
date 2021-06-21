@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# bin/compile <build-dir> <cache-dir> <env-dir>
+
+# Fail immediately on non-zero exit code.
+set -e
+# Fail immediately on non-zero exit code within a pipeline.
+set -o pipefail
+# Fail on undeclared variables.
+#set -u
+# Debug, echo every command
+#set -x
+
+# parse and derive params
+BUILD_DIR="${1}"
+CACHE_DIR="${2}"
+ENV_DIR="${3}"
+BIN_DIR=$(cd $(dirname $0); pwd) # absolute path
+
+# source in common functions
+. "${BIN_DIR}/common.sh"
+
+if [[ -n ${3:-} ]]; then
+  export_env_dir "${ENV_DIR}"
+fi
+
+# Create the cache dir if it doesn't exist
+if [[ -n ${2:-} ]]; then
+  mkdir -p "${CACHE_DIR}"
+fi
+
+VENDOR_DIR="${BUILD_DIR}/vendor"
+GOOGLE_CLOUD_SDK_DIR="${VENDOR_DIR}/google-cloud-sdk"
+PROFILED_DIR="${BUILD_DIR}/.profile.d"
+
+if [[ -n ${GOOGLE_CLOUD_SDK_BIN_URL:-} ]]; then
+	echo 'Using $GOOGLE_CLOUD_SDK_BIN_URL from ENV VAR for installation' | indent
+else
+	GOOGLE_CLOUD_SDK_BIN_URL="https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-sdk-345.0.0-linux-x86_64.tar.gz"
+fi
+
+topic "Installing Google Cloud SDK from ${GOOGLE_CLOUD_SDK_BIN_URL}"
+curl -s -L "${GOOGLE_CLOUD_SDK_BIN_URL}" > "google-sdk.tar.gz"
+mkdir -p "${VENDOR_DIR}"
+tar xf google-sdk.tar.gz -C "${VENDOR_DIR}"
+"${GOOGLE_CLOUD_SDK_DIR}"/install.sh --usage-reporting=false --path-update=false --bash-completion=false
+rm google-sdk.tar.gz
+
+echo 'Setting up $PATH' | indent
+mkdir -p "${PROFILED_DIR}"
+echo 'source $HOME/vendor/google-cloud-sdk/path.bash.inc' > "${PROFILED_DIR}/google-cloud-sdk.sh"
+
+echo 'Installing kubectl' | indent
+source "${GOOGLE_CLOUD_SDK_DIR}/path.bash.inc"
+gcloud components install kubectl --quiet
